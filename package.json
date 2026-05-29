@@ -1,0 +1,15 @@
+{
+  "name": "fundeyaco-bot",
+  "version": "1.0.0",
+  "description": "Bot Instagram automatique pour Fundeyaco avec Claude AI",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
