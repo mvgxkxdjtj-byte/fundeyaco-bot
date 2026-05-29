@@ -6,7 +6,7 @@ app.use(express.json());
 const VERIFY_TOKEN      = process.env.VERIFY_TOKEN      || 'fundeyaco_webhook_2026';
 const INSTAGRAM_TOKEN   = process.env.INSTAGRAM_TOKEN;
 const CLAUDE_API_KEY    = process.env.CLAUDE_API_KEY;
-const PORT              = process.env.PORT || 3000;
+const PORT              = process.env.PORT || 8080;
 
 // ─── PROMPT SYSTÈME FUNDEYACO ────────────────────────────────────────────────
 const SYSTEM_PROMPT = `Eres el asistente virtual de Fundeyaco (Fundación de Emergencia y Ayuda a Colombia), una ONG con sede en Mocoa, Colombia, que apoya comunidades vulnerables promoviendo su autonomía a través de la producción agrícola natural.
