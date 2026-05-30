@@ -2,99 +2,145 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
-// ─── CONFIGURATION ───────────────────────────────────────────────────────────
-const VERIFY_TOKEN      = process.env.VERIFY_TOKEN      || 'fundeyaco_webhook_2026';
-const INSTAGRAM_TOKEN   = process.env.INSTAGRAM_TOKEN;
-const CLAUDE_API_KEY    = process.env.CLAUDE_API_KEY;
-const PORT              = process.env.PORT || 8080;
+const VERIFY_TOKEN    = process.env.VERIFY_TOKEN    || 'fundeyaco_webhook_2026';
+const INSTAGRAM_TOKEN = process.env.INSTAGRAM_TOKEN;
+const CLAUDE_API_KEY  = process.env.CLAUDE_API_KEY;
+const PORT            = process.env.PORT || 8080;
 
-// ─── PROMPT SYSTÈME FUNDEYACO ────────────────────────────────────────────────
-const SYSTEM_PROMPT = `Eres el asistente virtual de Fundeyaco (Fundación de Emergencia y Ayuda a Colombia), una ONG con sede en Mocoa, Colombia, que apoya comunidades vulnerables promoviendo su autonomía a través de la producción agrícola natural.
+const conversations = new Map();
 
-Nuestros productos son 100% naturales, sin aditivos ni conservantes, cultivados localmente.
+function getHistory(userId) {
+  if (!conversations.has(userId)) conversations.set(userId, []);
+  return conversations.get(userId);
+}
 
-CATÁLOGO DE PRECIOS:
+function addToHistory(userId, role, content) {
+  const history = getHistory(userId);
+  history.push({ role, content });
+  if (history.length > 20) history.splice(0, 2);
+}
 
-Cúrcuma en polvo:
-  • 50 g  → $10.000
-  • 100 g → $15.000
-  • 500 g → $42.000
-  • 750 g → $65.000
-  • 1 kg  → $75.000
+const SYSTEM_PROMPT = `Eres el asesor de ventas virtual de Fundeyaco (Fundación de Emergencia y Ayuda a Colombia), ONG en Mocoa, Colombia, que apoya comunidades del Putumayo a través de productos agrícolas naturales.
 
-Cúrcuma en rizoma:
-  • 1 kg  → $18.000
+CATÁLOGO COMPLETO:
+- Cúrcuma en polvo: 50g=$10.000 | 100g=$15.000 | 500g=$42.000 | 750g=$65.000 | 1kg=$75.000
+- Cúrcuma en rizoma (fresca): 1kg=$18.000
+- Pimienta negra en grano: 500g=$30.000 | 1kg=$55.000
+- Pimienta negra molida: 250g=$19.000 | 500g=$35.000 | 1kg=$59.000
 
-Pimienta negra en grano:
-  • 500 g → $30.000
-  • 1 kg  → $55.000
+PRECIOS MAYOREO (negocio):
+- 1kg → $75.000
+- 5kg → $70.000/kg
+- 10kg o más → $65.000/kg (precios mejoran según volumen y frecuencia)
+- Pedidos superiores a 10kg: hablar con asesor por WhatsApp +57 322 881 9268
 
-Pimienta negra molida:
-  • 250 g → $19.000
-  • 500 g → $35.000
-  • 1 kg  → $59.000
+ENVÍOS:
+- A todo Colombia con Interrapidísimo
+- Entrega en 2-3 días hábiles
+- Costo envío estimado: ~$16.000 hasta 1kg, ~$4.000 por kg adicional. SIEMPRE aclarar que es indicativo — el precio final lo confirma Interrapidísimo en la entrega.
+- NO mencionar el costo de envío a menos que el cliente lo pregunte
 
-PRECIOS AL POR MAYOR:
-Para pedidos superiores a 10 kg, ofrecemos precios especiales al por mayor. Escríbenos por WhatsApp y te damos el mejor precio según cantidad y destino.
+FORMAS DE PAGO (solo mostrar cuando el cliente pregunte o al confirmar pedido):
+1. Mercado Pago: https://link.mercadopago.com.co/fundeyaco
+2. Transferencia BBVA: Razón social: FUNDACION DE EMERGENCIA Y AYUDA A COLOMBIA | NIT: 901084804 | Cuenta ahorros: 0073-692923
+3. Contraentrega Interrapidísimo: disponible para pedidos superiores a 1kg
 
-Realizamos envíos a todo Colombia.
+FORMULARIO DE PEDIDO (pedir cuando cliente confirma):
+- Nombre completo
+- Cédula
+- Producto y cantidad
+- Número de celular
+- Dirección completa
+- Correo electrónico
 
-Para hacer un pedido o solicitar cotización al por mayor:
-WhatsApp Business: +57 322 881 9268
+CONFIRMACIÓN DE PEDIDO (después de recibir datos):
+"¡Gracias! Te confirmo: [producto] – [precio]. Envío aprox. $[costo] (precio indicativo — el valor exacto lo confirma Interrapidísimo en la entrega). Entrega 2-3 días hábiles. ¿Confirmas el pedido?"
 
-INSTRUCCIONES DE RESPUESTA:
-- Responde siempre en español, con tono cálido, cercano y profesional.
-- Sé conciso: máximo 4-5 líneas por respuesta.
-- Si alguien pregunta por precios, muestra el listado completo del producto mencionado.
-- Si alguien quiere hacer un pedido o pide más de 10 kg, redirige siempre al WhatsApp.
-- Si la pregunta no tiene relación con nuestros productos o la fundación, responde amablemente que solo puedes ayudar con información sobre Fundeyaco.`;
+MENSAJE FINAL (después de confirmación):
+"¡Excelente! Tu pedido queda confirmado y será despachado en las próximas horas. Te enviaremos la guía de Interrapidísimo apenas esté disponible. ¡Gracias por apoyar a las comunidades del Putumayo!"
 
-// ─── WEBHOOK VERIFICATION ────────────────────────────────────────────────────
+FLUJO DE VENTAS:
+
+PASO 1 - BIENVENIDA (primer mensaje):
+"¡Buenas! 😊 Gracias por escribir a Fundeyaco 🌱 Nuestra cúrcuma es 100% natural, sin mezclas, cultivada por comunidades del Putumayo. 📦 Envíos a todo Colombia 💳 Pago contraentrega. ¿La buscas para consumo personal o para negocio/reventa?"
+NO dar precios todavía.
+
+PASO 2A - SI ES PERSONAL:
+Preguntar para qué la usa (bebidas, cocinar, salud, mascotas) y cuántas personas la van a consumir. Recomendar 500g como la más vendida (rinde 2-3 meses para una familia).
+
+PASO 2B - SI ES NEGOCIO:
+"¡Excelente! Trabajamos con emprendedores, tiendas y restaurantes. 📦 Vendemos desde 1kg con precios especiales según volumen. ¿En qué ciudad estás y qué cantidad aproximada te interesaría?"
+Mostrar tabla de precios mayoreo. Para +10kg redirigir a WhatsApp.
+
+PASO 3 - PROPUESTA:
+Basarse en respuestas para recomendar presentación ideal. Dar precio exacto.
+
+PASO 4 - OBJECIONES:
+- Precio alto: "Es 100% pura, sin mezclas, molida en pequeños lotes, de 30 familias del Putumayo. Sin intermediarios."
+- Descuento: Solo para +5kg (mayoreo). Para menos no hay descuento pero es el mejor precio del mercado.
+- Calidad: "Podemos enviarte un video del cultivo y del producto 📹"
+- Envío: Interrapidísimo, 2-3 días hábiles, $16.000 hasta 1kg.
+
+PASO 5 - CIERRE:
+Pedir los datos del formulario de pedido. Calcular total (producto + envío). Confirmar pedido. Enviar mensaje final.
+
+RESPUESTA A COMENTARIO EN REEL/POST (elegir aleatoriamente una de estas 6 opciones cada vez):
+"¡Hola! 😊 Te enviamos toda la info por privado ahora mismo 🌱"
+"¡Con gusto! Te mandamos los detalles por DM 📩🌿"
+"¡Gracias por tu interés! 😊 Revisa tus mensajes privados, te enviamos todo ahí 🌱"
+"¡Hola! Te compartimos el catálogo completo por privado 📦💛"
+"¡Qué bueno que te interesa! Te escribimos por DM con toda la info 😊🌿"
+"¡Claro que sí! Te enviamos los precios y presentaciones por mensaje privado 🌱✨"
+
+REGLAS:
+- Siempre en español, tono cálido y cercano
+- Máximo 5-6 líneas por mensaje
+- Una sola pregunta por mensaje
+- NO mencionar costo de envío a menos que pregunten
+- NO dar todos los precios de golpe — filtrar según necesidad
+- Si ya confirmó pedido, despedirse con calidez
+- Si el cliente hace preguntas complejas que el bot no puede responder con certeza, sugerir contactar al asesor: "Para darte la mejor atención, te recomiendo hablar directamente con nuestro asesor Esteban Fajardo 📱 +57 311 228 7264"
+- Para pedidos mayoristas o negociaciones de volumen, SIEMPRE redirigir a Esteban Fajardo +57 311 228 7264`;
+
 app.get('/webhook', (req, res) => {
-  const mode      = req.query['hub.mode'];
-  const token     = req.query['hub.verify_token'];
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
-
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('Webhook verified successfully');
+    console.log('Webhook verified');
     res.status(200).send(challenge);
   } else {
-    console.error('Webhook verification failed');
     res.sendStatus(403);
   }
 });
 
-// ─── WEBHOOK EVENT HANDLER ───────────────────────────────────────────────────
 app.post('/webhook', async (req, res) => {
-  res.sendStatus(200); // Acknowledge immediately
-
+  res.sendStatus(200);
   const body = req.body;
   if (body.object !== 'instagram') return;
 
   for (const entry of body.entry || []) {
     for (const event of entry.messaging || []) {
       if (!event.message || event.message.is_echo) continue;
-
       const senderId = event.sender.id;
-      const text     = event.message.text;
-
+      const text = event.message.text;
       if (!text) continue;
 
-      console.log(`Message from ${senderId}: ${text}`);
-
+      console.log(`[IN] ${senderId}: ${text}`);
       try {
-        const reply = await askClaude(text);
+        addToHistory(senderId, 'user', text);
+        const reply = await askClaude(getHistory(senderId));
+        addToHistory(senderId, 'assistant', reply);
         await sendInstagramMessage(senderId, reply);
-        console.log(`Reply sent to ${senderId}: ${reply}`);
+        console.log(`[OUT] ${senderId}: ${reply.substring(0, 100)}`);
       } catch (err) {
-        console.error('Error processing message:', err.message);
+        console.error('Error:', err.message);
       }
     }
   }
 });
 
-// ─── CLAUDE API ──────────────────────────────────────────────────────────────
-async function askClaude(userMessage) {
+async function askClaude(messages) {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -104,41 +150,32 @@ async function askClaude(userMessage) {
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 300,
+      max_tokens: 400,
       system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }]
+      messages: messages
     })
   });
-
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message || 'Claude API error');
   return data.content[0].text;
 }
 
-// ─── INSTAGRAM SEND MESSAGE ──────────────────────────────────────────────────
 async function sendInstagramMessage(recipientId, text) {
   const response = await fetch(
     `https://graph.facebook.com/v19.0/me/messages?access_token=${INSTAGRAM_TOKEN}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        recipient: { id: recipientId },
-        message: { text }
-      })
+      body: JSON.stringify({ recipient: { id: recipientId }, message: { text } })
     }
   );
-
   const data = await response.json();
   if (!response.ok) throw new Error(JSON.stringify(data.error));
   return data;
 }
 
-// ─── HEALTH CHECK ────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Fundeyaco Bot', version: '1.0.0' });
+  res.json({ status: 'ok', service: 'Fundeyaco Bot v3', conversations: conversations.size });
 });
 
-app.listen(PORT, () => {
-  console.log(`Fundeyaco Bot running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Fundeyaco Bot v3 running on port ${PORT}`));
